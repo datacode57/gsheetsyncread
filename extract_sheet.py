@@ -104,21 +104,6 @@ if __name__ == "__main__":
             if not df.empty:
                 cleaned_dfs[tab_name] = clean_for_bq(df.copy())
             else:
-                cleaned_dfs[tab_name] = pd.DataFrame()
-        
-        # Next Steps Example: Inserting into BigQuery
-        # from google.cloud import bigquery
-        # client = bigquery.Client()
-        # dataset_id = "your-project.your_dataset"
-        # job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE") # or WRITE_APPEND
-        # 
-        # for tab_name, c_df in cleaned_dfs.items():
-        #     if not c_df.empty:
-        #         table_name = re.sub(r'[^a-zA-Z0-9_]', '_', tab_name) # Sanitize table name
-        #         table_id = f"{dataset_id}.{table_name}"
-        #         print(f"Loading '{tab_name}' into '{table_id}'...")
-        #         job = client.load_table_from_dataframe(c_df, table_id, job_config=job_config)
-        #         job.result()  # Wait for the job to complete
-        
+                cleaned_dfs[tab_name] = pd.DataFrame()        
     except Exception as e:
         print(f"\nError occurred: {e}")
