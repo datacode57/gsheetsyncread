@@ -1,6 +1,5 @@
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
 import re
 import ssl
 
@@ -17,7 +16,7 @@ def get_all_sheets_data(sheet_identifier, credentials_path):
     import concurrent.futures
 
     if not credentials_path:
-        raise ValueError("credentials_path is required to access private Google Sheets. Please provide the path to your service account JSON file.")
+        raise ValueError("credentials_path is required to access private Google Sheets. Please provide the path to your OAuth Client ID JSON file (client_secret.json).")
 
     sheet_id = sheet_identifier
     match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_identifier)
@@ -26,17 +25,39 @@ def get_all_sheets_data(sheet_identifier, credentials_path):
 
     dfs = {}
     
-    print("Authenticating with Google service account...")
+    print("Authenticating with personal Google account...")
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    credentials = Credentials.from_service_account_file(credentials_path, scopes=scopes)
+    
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    import os
+    
+    creds = None
+    token_path = 'token.json'
+    
+    if os.path.exists(token_path):
+        creds = OAuthCredentials.from_authorized_user_file(token_path, scopes)
+        
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(google.auth.transport.requests.Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(credentials_path, scopes)
+            creds = flow.run_local_server(port=0)
+        with open(token_path, 'w') as token:
+            token.write(creds.to_json())
+            
+    credentials = creds
     
     # Authorized HTTP Session
     session = requests.Session()
     retries = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
     session.mount('https://', HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=20))
     
-    request = google.auth.transport.requests.Request(session)
-    credentials.refresh(request)
+    if not credentials.token:
+        request = google.auth.transport.requests.Request(session)
+        credentials.refresh(request)
+        
     session.headers.update({'Authorization': f'Bearer {credentials.token}'})
 
     client = gspread.Client(auth=credentials, session=session)
@@ -45,7 +66,7 @@ def get_all_sheets_data(sheet_identifier, credentials_path):
     try:
         sh = client.open_by_key(sheet_id)
     except Exception as e:
-        raise RuntimeError(f"Could not open sheet. Ensure the Service Account Email is shared as a 'Viewer' on the Google Sheet. Error: {e}")
+        raise RuntimeError(f"Could not open sheet. Ensure your Google account has access to the sheet. Error: {e}")
     
     worksheets = sh.worksheets()
     
@@ -87,7 +108,7 @@ def clean_for_bq(df):
 
 if __name__ == "__main__":
     SHEET_IDENTIFIER = "https://docs.google.com/spreadsheets/d/1p6pRyr0FJkzSd52oHMjCwMTJiXP1CHxc5xrBY88_3DY/edit?gid=0#gid=0"
-    CREDENTIALS_JSON_PATH = "path/to/your/service_account.json"
+    CREDENTIALS_JSON_PATH = "path/to/your/client_secret.json"
     
     try:
         raw_dfs = get_all_sheets_data(
